@@ -1,0 +1,30 @@
+[project]
+name = "fundataworks"
+version = "0.1.1"
+description = "fundataworks"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [ "alibabacloud-dataworks-public20200518>=8.0.0", "alibabacloud-dataworks-public20240518>=7.2.5",]
+[[project.authors]]
+name = "牛哥"
+email = "niuliangtao@qq.com"
+
+[[project.authors]]
+name = "farfarfun"
+email = "farfarfun@qq.com"
+
+[[project.maintainers]]
+name = "牛哥"
+email = "niuliangtao@qq.com"
+
+[[project.maintainers]]
+name = "farfarfun"
+email = "farfarfun@qq.com"
+
+[project.urls]
+Organization = "https://github.com/farfarfun"
+Repository = "https://github.com/farfarfun/fundataworks"
+Releases = "https://github.com/farfarfun/fundataworks/releases"
+
+[tool.setuptools]
+license-files = []
