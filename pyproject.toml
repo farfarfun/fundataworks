@@ -4,7 +4,10 @@ version = "0.1.1"
 description = "fundataworks"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [ "alibabacloud-dataworks-public20200518>=8.0.0", "alibabacloud-dataworks-public20240518>=7.2.5",]
+dependencies = [ "alibabacloud-dataworks-public20200518>=8.0.0", "alibabacloud-dataworks-public20240518>=7.2.5", "alibabacloud-openapi-util>=0.2.2", "alibabacloud-endpoint-util>=0.0.3", "alibabacloud-tea-openapi>=0.3.0", "alibabacloud-tea-util>=0.3.0",]
+
+[dependency-groups]
+dev = [ "pytest>=8.0.0",]
 [[project.authors]]
 name = "牛哥"
 email = "niuliangtao@qq.com"
