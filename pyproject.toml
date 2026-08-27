@@ -1,6 +1,6 @@
 [project]
 name = "fundataworks"
-version = "0.1.1"
+version = "0.1.2"
 description = "fundataworks"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -28,6 +28,10 @@ email = "farfarfun@qq.com"
 Organization = "https://github.com/farfarfun"
 Repository = "https://github.com/farfarfun/fundataworks"
 Releases = "https://github.com/farfarfun/fundataworks/releases"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.setuptools]
 license-files = []
