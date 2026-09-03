@@ -1,18 +1,45 @@
-from typing import Union, Dict, Any
+"""阿里云 DataWorks OpenAPI 客户端封装。
 
-from alibabacloud_tea_openapi import models as open_api_models
-from alibabacloud_tea_util.client import Client as UtilClient
+说明：本模块开启 `from __future__ import annotations`，函数签名中的类型注解
+在运行时不会被立即求值（PEP 563）。这是必须的——DataWorks 的两个 OpenAPI
+版本（2020-05-18 与 2024-05-18）请求模型并不完全对称，例如
+`CreateNodeRequest`/`UpdateNodeRequest`/`CreatePipelineRunRequest`/
+`ExecPipelineRunStageRequest` 只存在于 2024-05-18 版本，而
+`CreateDISyncTaskRequest` 只存在于 2020-05-18 版本。如果不延迟求值，
+仅仅 import 本模块（触发类体执行）就会因为引用了不存在的属性而抛出
+`AttributeError`。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
 from alibabacloud_dataworks_public20200518 import models as models_20200518
 from alibabacloud_dataworks_public20240518 import models as models_20240518
-from alibabacloud_openapi_util.client import Client as OpenApiUtilClient
-from alibabacloud_tea_openapi.client import Client as OpenApiClient
 from alibabacloud_endpoint_util.client import Client as EndpointUtilClient
+from alibabacloud_openapi_util.client import Client as OpenApiUtilClient
+from alibabacloud_tea_openapi import models as open_api_models
+from alibabacloud_tea_openapi.client import Client as OpenApiClient
 from alibabacloud_tea_openapi.models import OpenApiRequest, Params
+from alibabacloud_tea_util.client import Client as UtilClient
 from alibabacloud_tea_util.models import RuntimeOptions
 
 
 class Client(OpenApiClient):
-    def __init__(self, config: open_api_models.Config, version="2020-05-18"):
+    """阿里云 DataWorks OpenAPI 客户端。
+
+    封装节点、数据源、数据集成任务（DI Job / DISync Task）、目录以及
+    工作流实例（Pipeline Run）等常用接口的请求拼装与调用。
+    """
+
+    def __init__(self, config: open_api_models.Config, version: str = "2020-05-18"):
+        """初始化客户端。
+
+        参数:
+            config: 阿里云 OpenAPI 通用配置（AK/SK、region 等）。
+            version: 使用的 DataWorks OpenAPI 版本号，默认 `2020-05-18`，
+                另支持 `2024-05-18`。
+        """
         super().__init__(config)
         self.version = version
         self._endpoint_rule = "regional"
@@ -60,9 +87,23 @@ class Client(OpenApiClient):
         endpoint_rule: str,
         network: str,
         suffix: str,
-        endpoint_map: Dict[str, str],
+        endpoint_map: dict[str, str],
         endpoint: str,
     ) -> str:
+        """解析实际请求的 endpoint。
+
+        参数:
+            product_id: 产品代码。
+            region_id: 地域 ID。
+            endpoint_rule: endpoint 生成规则。
+            network: 网络类型。
+            suffix: endpoint 后缀。
+            endpoint_map: 地域到 endpoint 的映射表。
+            endpoint: 显式指定的 endpoint，非空时优先使用。
+
+        返回:
+            最终使用的 endpoint 字符串。
+        """
         if not UtilClient.empty(endpoint):
             return endpoint
         if not UtilClient.is_unset(endpoint_map) and not UtilClient.empty(
@@ -84,6 +125,21 @@ class Client(OpenApiClient):
         req_body_type: str = "formData",
         style: str = "RPC",
     ) -> Params:
+        """构造一次 OpenAPI 调用所需的 `Params`。
+
+        参数:
+            action: OpenAPI 的 Action 名称，例如 `GetNode`。
+            method: HTTP 方法，默认 `POST`。
+            protocol: 请求协议，默认 `HTTPS`。
+            pathname: 请求路径，默认 `/`。
+            auth_type: 鉴权方式，默认 `AK`。
+            body_type: 响应体类型，默认 `json`。
+            req_body_type: 请求体类型，默认 `formData`。
+            style: API 风格，默认 `RPC`。
+
+        返回:
+            组装好的 `Params` 对象，供 `call_api` 使用。
+        """
         return Params(
             action=action,
             version=self.version,
@@ -98,11 +154,16 @@ class Client(OpenApiClient):
 
     def get_node(
         self,
-        request: Union[
-            models_20200518.GetNodeRequest,
-            models_20240518.GetNodeRequest,
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.GetNodeRequest | models_20240518.GetNodeRequest,
+    ) -> dict[str, Any]:
+        """查询单个节点详情。
+
+        参数:
+            request: `GetNodeRequest`，需指定 `node_id`，可选 `project_env`。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         request.validate()
         body = {}
         if request.node_id is not None:
@@ -118,11 +179,17 @@ class Client(OpenApiClient):
 
     def list_data_sources(
         self,
-        request1: Union[
-            models_20200518.ListDataSourcesRequest,
-            models_20240518.ListDataSourcesRequest,
-        ],
-    ):
+        request1: models_20200518.ListDataSourcesRequest
+        | models_20240518.ListDataSourcesRequest,
+    ) -> dict[str, Any]:
+        """查询数据源列表。
+
+        参数:
+            request1: `ListDataSourcesRequest`，用于按项目、类型等条件过滤。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         request1.validate()
         request = models_20240518.ListDataSourcesShrinkRequest()
         OpenApiUtilClient.convert(request1, request)
@@ -141,10 +208,16 @@ class Client(OpenApiClient):
 
     def create_node(
         self,
-        request: Union[
-            models_20200518.CreateNodeRequest, models_20240518.CreateNodeRequest
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.CreateNodeRequest | models_20240518.CreateNodeRequest,
+    ) -> dict[str, Any]:
+        """创建节点。
+
+        参数:
+            request: `CreateNodeRequest`，需指定 `project_id`、`spec` 等字段。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         body = {}
         if not UtilClient.is_unset(request.container_id):
@@ -163,10 +236,16 @@ class Client(OpenApiClient):
 
     def list_nodes(
         self,
-        request: Union[
-            models_20200518.ListNodesRequest, models_20240518.ListNodesRequest
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.ListNodesRequest | models_20240518.ListNodesRequest,
+    ) -> dict[str, Any]:
+        """查询节点列表。
+
+        参数:
+            request: `ListNodesRequest`，用于按项目等条件过滤。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         query = OpenApiUtilClient.query(UtilClient.to_map(request))
         return self.call_api(
@@ -177,10 +256,16 @@ class Client(OpenApiClient):
 
     def update_node(
         self,
-        request: Union[
-            models_20200518.UpdateNodeRequest, models_20240518.UpdateNodeRequest
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.UpdateNodeRequest | models_20240518.UpdateNodeRequest,
+    ) -> dict[str, Any]:
+        """更新节点。
+
+        参数:
+            request: `UpdateNodeRequest`，需指定 `id`、`project_id`、`spec`。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         body = {}
         if not UtilClient.is_unset(request.id):
@@ -198,10 +283,18 @@ class Client(OpenApiClient):
 
     def create_dijob(
         self,
-        tmp_req: Union[
-            models_20200518.CreateDIJobRequest, models_20240518.CreateDIJobRequest
-        ],
-    ) -> Dict[str, Any]:
+        tmp_req: models_20200518.CreateDIJobRequest
+        | models_20240518.CreateDIJobRequest,
+    ) -> dict[str, Any]:
+        """创建数据集成任务（DI Job）。
+
+        参数:
+            tmp_req: `CreateDIJobRequest`，包含来源/目标数据源、任务与
+                资源配置等字段（列表/对象字段会被收缩为字符串再发起请求）。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(tmp_req)
         request = models_20240518.CreateDIJobShrinkRequest()
         OpenApiUtilClient.convert(tmp_req, request)
@@ -254,11 +347,18 @@ class Client(OpenApiClient):
 
     def create_disync(
         self,
-        request: Union[
-            models_20200518.CreateDISyncTaskRequest,
-            models_20240518.CreateDISyncTaskRequest,
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.CreateDISyncTaskRequest
+        | models_20240518.CreateDISyncTaskRequest,
+    ) -> dict[str, Any]:
+        """创建数据同步任务（DISync Task）。
+
+        参数:
+            request: `CreateDISyncTaskRequest`，需指定 `project_id`、
+                `task_name`、`task_content` 等字段。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         query = {}
         if not UtilClient.is_unset(request.client_token):
@@ -282,11 +382,18 @@ class Client(OpenApiClient):
 
     def list_folders(
         self,
-        request: Union[
-            models_20200518.ListFoldersRequest,
-            models_20240518.ListFoldersRequest,
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.ListFoldersRequest
+        | models_20240518.ListFoldersRequest,
+    ) -> dict[str, Any]:
+        """查询目录（文件夹）列表。
+
+        参数:
+            request: `ListFoldersRequest`，可指定分页、父目录路径、
+                项目 ID/标识等过滤条件。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         body = {}
         if not UtilClient.is_unset(request.page_number):
@@ -307,11 +414,18 @@ class Client(OpenApiClient):
 
     def create_pipeline_run(
         self,
-        tmp_req: Union[
-            models_20200518.CreatePipelineRunRequest,
-            models_20240518.CreatePipelineRunRequest,
-        ],
-    ) -> Dict[str, Any]:
+        tmp_req: models_20200518.CreatePipelineRunRequest
+        | models_20240518.CreatePipelineRunRequest,
+    ) -> dict[str, Any]:
+        """创建工作流实例（Pipeline Run）。
+
+        参数:
+            tmp_req: `CreatePipelineRunRequest`，需指定 `project_id`、
+                `type`，可选 `object_ids`、`description`。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(tmp_req)
         request = models_20240518.CreatePipelineRunShrinkRequest()
         OpenApiUtilClient.convert(tmp_req, request)
@@ -339,11 +453,20 @@ class Client(OpenApiClient):
 
     def get_pipeline_run(
         self,
-        request: Union[
-            models_20200518.CreatePipelineRunRequest,
-            models_20240518.CreatePipelineRunRequest,
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.CreatePipelineRunRequest
+        | models_20240518.CreatePipelineRunRequest,
+    ) -> dict[str, Any]:
+        """查询工作流实例（Pipeline Run）详情。
+
+        注意：请求模型沿用 `CreatePipelineRunRequest`（仅使用其
+        `project_id` 等查询字段），不影响运行时行为。
+
+        参数:
+            request: 请求对象，需至少指定 `project_id`。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         query = OpenApiUtilClient.query(UtilClient.to_map(request))
         return self.call_api(
@@ -354,11 +477,18 @@ class Client(OpenApiClient):
 
     def exec_pipeline_run_stage_with_options(
         self,
-        request: Union[
-            models_20200518.ExecPipelineRunStageRequest,
-            models_20240518.ExecPipelineRunStageRequest,
-        ],
-    ) -> Dict[str, Any]:
+        request: models_20200518.ExecPipelineRunStageRequest
+        | models_20240518.ExecPipelineRunStageRequest,
+    ) -> dict[str, Any]:
+        """推进工作流实例的某个阶段（stage）执行。
+
+        参数:
+            request: `ExecPipelineRunStageRequest`，需指定 `project_id`、
+                `id`，可选 `code`。
+
+        返回:
+            OpenAPI 调用返回的响应字典。
+        """
         UtilClient.validate_model(request)
         query = {}
         if not UtilClient.is_unset(request.project_id):

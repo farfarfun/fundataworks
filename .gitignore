@@ -60,6 +60,12 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+*.db
+*.rar
+
+# 服务运行时文件（日志、PID、lock）
+.run/
+logs/
 
 # Flask stuff:
 instance/

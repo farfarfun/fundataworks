@@ -3,7 +3,8 @@ name = "fundataworks"
 version = "0.1.2"
 description = "fundataworks"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
+license = "MIT"
 dependencies = [ "alibabacloud-dataworks-public20200518>=8.0.0", "alibabacloud-dataworks-public20240518>=7.2.5", "alibabacloud-openapi-util>=0.2.2", "alibabacloud-endpoint-util>=0.0.3", "alibabacloud-tea-openapi>=0.3.0", "alibabacloud-tea-util>=0.3.0",]
 
 [dependency-groups]
@@ -32,6 +33,3 @@ Releases = "https://github.com/farfarfun/fundataworks/releases"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.setuptools]
-license-files = []

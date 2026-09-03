@@ -1,80 +1,25 @@
-"""fundataworks 轻量冒烟测试（smoke tests）。
+"""fundataworks 冒烟测试（smoke tests）。
 
-范围说明：本仓库此前没有 tests/ 目录，这里只做轻量的“能不能正常导入 /
-构造 / 按预期发起调用”的冒烟验证，不追求覆盖率，也不测试真实网络行为。
+覆盖包导入、`Client` 构造以及各公开方法的“请求对象 -> call_api”拼装路径。
+不测试真实网络行为（`call_api` 被 mock 掉）。
 
-已知问题（发现但按任务范围不修复，仅跳过并说明）：
-    `fundataworks/client/core.py` 中 `Client` 类体内，多个方法的参数类型
-    注解写成了::
-
-        Union[models_20200518.XxxRequest, models_20240518.XxxRequest]
-
-    但阿里云 DataWorks OpenAPI 的两个版本（2020-05-18 与 2024-05-18）请求模型
-    并不是完全对称的：
-      - `CreateNodeRequest` / `UpdateNodeRequest` / `CreatePipelineRunRequest` /
-        `ExecPipelineRunStageRequest` 只存在于 2024-05-18 版本的 models 里，
-        2020-05-18 版本里没有这些类；
-      - `CreateDISyncTaskRequest` 反过来只存在于 2020-05-18 版本里，
-        2024-05-18 版本里没有。
-    这些类型注解在模块被 import、类体被执行时就会被立即求值（该文件没有
-    `from __future__ import annotations`），所以只要触发到这些方法定义，
-    就会在类定义阶段直接抛出 `AttributeError`。
-    经验证：这与安装的 SDK 版本无关——即使把
-    `alibabacloud-dataworks-public20200518` / `...20240518` 精确固定到
-    `pyproject.toml` 里原本声明的最低版本（8.0.0 / 7.2.5），同样的
-    `AttributeError` 依然会在 `import fundataworks` 时抛出。也就是说，
-    **当前发布的源码使得整个包在任何依赖版本下都无法被正常 import**。
-    这是源码里的深层逻辑 bug，不在本次“补充冒烟测试”的任务范围内修复，
-    这里用 `pytest.skip` 标注并在下面统一说明；一旦上游修复，这些测试会
-    自动开始正常执行。
+历史说明：`core.py` 中若干方法曾用
+`Union[models_20200518.XxxRequest, models_20240518.XxxRequest]` 做参数
+注解，但两个 DataWorks OpenAPI 版本的请求模型并不对称
+（`CreateNodeRequest`/`UpdateNodeRequest`/`CreatePipelineRunRequest`/
+`ExecPipelineRunStageRequest` 仅存在于 2024-05-18 版本，
+`CreateDISyncTaskRequest` 仅存在于 2020-05-18 版本），且该文件当时没有
+`from __future__ import annotations`，导致注解在类定义阶段被立即求值、
+从而在 import 期直接抛出 `AttributeError`。现已在 `core.py` 顶部加入
+`from __future__ import annotations` 使注解延迟求值，问题修复，
+本文件不再需要跳过逻辑。
 """
 
 from __future__ import annotations
 
 import importlib
 import importlib.metadata
-import sys
-import unittest.mock as mock
-
-import pytest
-
-
-def _fresh_import_fundataworks():
-    """尝试（重新）导入 fundataworks 及其子模块，返回 (成功?, 异常对象)。"""
-    for name in list(sys.modules):
-        if name == "fundataworks" or name.startswith("fundataworks."):
-            del sys.modules[name]
-    try:
-        module = importlib.import_module("fundataworks")
-        return True, module, None
-    except Exception as exc:  # noqa: BLE001 - 冒烟测试只关心能否导入
-        return False, None, exc
-
-
-_IMPORT_OK, _fundataworks, _IMPORT_ERR = _fresh_import_fundataworks()
-
-_KNOWN_BUG_SKIP_REASON = (
-    "已知 bug：fundataworks/client/core.py 中若干方法用 "
-    "Union[models_20200518.XxxRequest, models_20240518.XxxRequest] 做类型注解，"
-    "但两个 DataWorks OpenAPI 版本的请求模型并不对称"
-    "（CreateNodeRequest/UpdateNodeRequest/CreatePipelineRunRequest/"
-    "ExecPipelineRunStageRequest 仅存在于 2024-05-18 版本，"
-    "CreateDISyncTaskRequest 仅存在于 2020-05-18 版本）。"
-    "这些注解在模块 import 时的类定义阶段即被求值，导致当前源码在任何依赖版本下"
-    "都无法被 import（已用最低声明版本 8.0.0/7.2.5 验证过，现象相同）。"
-    "这是源码逻辑 bug，超出本次“补充轻量冒烟测试”的任务范围，故跳过，不做修复。"
-    f" 实际捕获的异常: {_IMPORT_ERR!r}"
-)
-
-
-def _skip_if_broken():
-    if not _IMPORT_OK:
-        pytest.skip(_KNOWN_BUG_SKIP_REASON)
-
-
-# ---------------------------------------------------------------------------
-# 1. 包元数据 / 依赖是否能被正确解析（不依赖有 bug 的 core.py 也能验证）
-# ---------------------------------------------------------------------------
+from unittest import mock
 
 
 def test_package_metadata_is_installed():
@@ -84,13 +29,7 @@ def test_package_metadata_is_installed():
 
 
 def test_declared_runtime_dependencies_are_importable():
-    """pyproject.toml 中声明的运行时依赖模块应该都能独立 import 成功。
-
-    这些依赖是 core.py 里直接 `import` 用到的模块；其中
-    alibabacloud_openapi_util / alibabacloud_endpoint_util 原先在
-    pyproject.toml 里缺失声明（虽然能通过其它包间接装上，但不保证），
-    本次已作为最小修复补充声明。
-    """
+    """pyproject.toml 中声明的运行时依赖模块应该都能独立 import 成功。"""
     for mod_name in (
         "alibabacloud_tea_openapi",
         "alibabacloud_tea_util",
@@ -102,13 +41,7 @@ def test_declared_runtime_dependencies_are_importable():
         importlib.import_module(mod_name)
 
 
-# ---------------------------------------------------------------------------
-# 2. 顶层包 / 子模块导入（受已知 bug 阻塞，见文件头说明）
-# ---------------------------------------------------------------------------
-
-
 def test_import_top_level():
-    _skip_if_broken()
     import fundataworks
 
     assert hasattr(fundataworks, "Client")
@@ -116,7 +49,6 @@ def test_import_top_level():
 
 
 def test_import_submodules():
-    _skip_if_broken()
     import fundataworks.client
     import fundataworks.client.core
 
@@ -125,8 +57,8 @@ def test_import_submodules():
 
 
 # ---------------------------------------------------------------------------
-# 3. Client 构造 —— 使用假凭据 + 已在本地 endpoint_map 命中的 region，
-#    因此不会发起任何真实网络请求。
+# Client 构造 —— 使用假凭据 + 已在本地 endpoint_map 命中的 region，
+# 因此不会发起任何真实网络请求。
 # ---------------------------------------------------------------------------
 
 
@@ -141,7 +73,6 @@ def _make_config():
 
 
 def test_client_construction_without_network():
-    _skip_if_broken()
     from fundataworks import Client
 
     client = Client(_make_config())
@@ -151,7 +82,6 @@ def test_client_construction_without_network():
 
 
 def test_client_construction_with_explicit_version():
-    _skip_if_broken()
     from fundataworks import Client
 
     client = Client(_make_config(), version="2024-05-18")
@@ -159,7 +89,6 @@ def test_client_construction_with_explicit_version():
 
 
 def test_client_get_param_builds_expected_params():
-    _skip_if_broken()
     from fundataworks import Client
 
     client = Client(_make_config())
@@ -171,10 +100,40 @@ def test_client_get_param_builds_expected_params():
     assert params.style == "RPC"
 
 
+def test_get_endpoint_prefers_explicit_endpoint():
+    from fundataworks import Client
+
+    endpoint = Client.get_endpoint(
+        "dataworks-public",
+        "cn-hangzhou",
+        "regional",
+        "public",
+        "aliyuncs.com",
+        {"cn-hangzhou": "dataworks.cn-hangzhou.aliyuncs.com"},
+        "explicit.example.com",
+    )
+    assert endpoint == "explicit.example.com"
+
+
+def test_get_endpoint_falls_back_to_map():
+    from fundataworks import Client
+
+    endpoint = Client.get_endpoint(
+        "dataworks-public",
+        "cn-hangzhou",
+        "regional",
+        "public",
+        "aliyuncs.com",
+        {"cn-hangzhou": "dataworks.cn-hangzhou.aliyuncs.com"},
+        "",
+    )
+    assert endpoint == "dataworks.cn-hangzhou.aliyuncs.com"
+
+
 # ---------------------------------------------------------------------------
-# 4. 各请求方法：mock 掉 call_api（真正发起网络调用的地方），
-#    只验证「请求对象 -> call_api 调用」这段拼装逻辑不会抛异常、
-#    且确实按预期发起了一次调用。不触碰真实阿里云网络/凭据。
+# 各请求方法：mock 掉 call_api（真正发起网络调用的地方），
+# 只验证「请求对象 -> call_api 调用」这段拼装逻辑不会抛异常、
+# 且确实按预期发起了一次调用。不触碰真实阿里云网络/凭据。
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +146,6 @@ def _client_with_mocked_call_api():
 
 
 def test_get_node_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20200518 import models as models_20200518
 
     client = _client_with_mocked_call_api()
@@ -199,8 +157,20 @@ def test_get_node_calls_api_once():
     assert result == {"body": {}}
 
 
+def test_get_node_omits_unset_fields():
+    from alibabacloud_dataworks_public20200518 import models as models_20200518
+
+    client = _client_with_mocked_call_api()
+    request = models_20200518.GetNodeRequest(node_id=1)
+
+    client.get_node(request)
+
+    _, args, _kwargs = client.call_api.mock_calls[0]
+    body = args[1].body
+    assert body == {"NodeId": 1}
+
+
 def test_list_data_sources_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -212,7 +182,6 @@ def test_list_data_sources_calls_api_once():
 
 
 def test_create_node_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -226,7 +195,6 @@ def test_create_node_calls_api_once():
 
 
 def test_list_nodes_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -238,7 +206,6 @@ def test_list_nodes_calls_api_once():
 
 
 def test_update_node_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -250,11 +217,12 @@ def test_update_node_calls_api_once():
 
 
 def test_list_folders_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
-    request = models_20240518.ListFoldersRequest(project_id=1, page_number=1, page_size=10)
+    request = models_20240518.ListFoldersRequest(
+        project_id=1, page_number=1, page_size=10
+    )
 
     client.list_folders(request)
 
@@ -262,7 +230,6 @@ def test_list_folders_calls_api_once():
 
 
 def test_create_dijob_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20200518 import models as models_20200518
 
     client = _client_with_mocked_call_api()
@@ -274,11 +241,12 @@ def test_create_dijob_calls_api_once():
 
 
 def test_create_disync_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20200518 import models as models_20200518
 
     client = _client_with_mocked_call_api()
-    request = models_20200518.CreateDISyncTaskRequest(project_id=1, task_name="smoke-task")
+    request = models_20200518.CreateDISyncTaskRequest(
+        project_id=1, task_name="smoke-task"
+    )
 
     client.create_disync(request)
 
@@ -286,7 +254,6 @@ def test_create_disync_calls_api_once():
 
 
 def test_create_pipeline_run_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -298,10 +265,9 @@ def test_create_pipeline_run_calls_api_once():
 
 
 def test_get_pipeline_run_calls_api_once():
-    _skip_if_broken()
     # 注意：core.py 里 get_pipeline_run 的类型注解写的是
-    # CreatePipelineRunRequest（很可能是复制粘贴导致的另一个小 bug），
-    # 但注解不影响运行时行为，这里按注解声明的类型来构造请求做冒烟验证。
+    # CreatePipelineRunRequest（沿用查询字段，不影响运行时行为），
+    # 这里按注解声明的类型构造请求做冒烟验证。
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -313,11 +279,12 @@ def test_get_pipeline_run_calls_api_once():
 
 
 def test_exec_pipeline_run_stage_with_options_calls_api_once():
-    _skip_if_broken()
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
-    request = models_20240518.ExecPipelineRunStageRequest(project_id=1, id="1", code="stage-code")
+    request = models_20240518.ExecPipelineRunStageRequest(
+        project_id=1, id="1", code="stage-code"
+    )
 
     client.exec_pipeline_run_stage_with_options(request)
 
@@ -325,7 +292,7 @@ def test_exec_pipeline_run_stage_with_options_calls_api_once():
 
 
 # ---------------------------------------------------------------------------
-# 5. CLI 入口
+# CLI 入口
 # ---------------------------------------------------------------------------
 
 
@@ -336,6 +303,8 @@ def test_no_cli_entry_point_declared():
     """
     metadata = importlib.metadata.metadata("fundataworks")
     entry_points = importlib.metadata.entry_points(group="console_scripts")
-    fundataworks_scripts = [ep for ep in entry_points if ep.dist and ep.dist.name == "fundataworks"]
+    fundataworks_scripts = [
+        ep for ep in entry_points if ep.dist and ep.dist.name == "fundataworks"
+    ]
     assert fundataworks_scripts == []
     assert metadata is not None
