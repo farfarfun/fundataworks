@@ -32,7 +32,9 @@ class Client(OpenApiClient):
     工作流实例（Pipeline Run）等常用接口的请求拼装与调用。
     """
 
-    def __init__(self, config: open_api_models.Config, version: str = "2020-05-18"):
+    def __init__(
+        self, config: open_api_models.Config, version: str = "2020-05-18"
+    ) -> None:
         """初始化客户端。
 
         参数:

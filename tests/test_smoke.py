@@ -130,6 +130,22 @@ def test_get_endpoint_falls_back_to_map():
     assert endpoint == "dataworks.cn-hangzhou.aliyuncs.com"
 
 
+def test_get_endpoint_falls_back_to_generated_rule_for_unknown_region():
+    from fundataworks import Client
+
+    endpoint = Client.get_endpoint(
+        "dataworks-public",
+        "unknown-region",
+        "regional",
+        "public",
+        "aliyuncs.com",
+        {},
+        "",
+    )
+
+    assert endpoint == "dataworks-public.unknown-region.aliyuncs.com"
+
+
 # ---------------------------------------------------------------------------
 # 各请求方法：mock 掉 call_api（真正发起网络调用的地方），
 # 只验证「请求对象 -> call_api 调用」这段拼装逻辑不会抛异常、
@@ -289,6 +305,34 @@ def test_exec_pipeline_run_stage_with_options_calls_api_once():
     client.exec_pipeline_run_stage_with_options(request)
 
     client.call_api.assert_called_once()
+
+
+def test_public_methods_accept_empty_optional_requests():
+    """空请求覆盖可选字段未设置时的边界拼装路径。"""
+    from alibabacloud_dataworks_public20200518 import models as models_20200518
+    from alibabacloud_dataworks_public20240518 import models as models_20240518
+
+    cases = (
+        ("get_node", models_20200518.GetNodeRequest),
+        ("list_data_sources", models_20240518.ListDataSourcesRequest),
+        ("create_node", models_20240518.CreateNodeRequest),
+        ("list_nodes", models_20240518.ListNodesRequest),
+        ("update_node", models_20240518.UpdateNodeRequest),
+        ("list_folders", models_20240518.ListFoldersRequest),
+        ("create_dijob", models_20200518.CreateDIJobRequest),
+        ("create_disync", models_20200518.CreateDISyncTaskRequest),
+        ("create_pipeline_run", models_20240518.CreatePipelineRunRequest),
+        ("get_pipeline_run", models_20240518.CreatePipelineRunRequest),
+        (
+            "exec_pipeline_run_stage_with_options",
+            models_20240518.ExecPipelineRunStageRequest,
+        ),
+    )
+
+    for method_name, request_type in cases:
+        client = _client_with_mocked_call_api()
+        getattr(client, method_name)(request_type())
+        client.call_api.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

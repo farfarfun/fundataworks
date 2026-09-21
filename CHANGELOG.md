@@ -21,3 +21,7 @@
 - `Client` 及其公开方法补充中文 docstring，并将 `typing.Union`/`typing.Dict` 替换为
   `X | Y`、`dict[str, Any]` 等 3.10 新式写法。
 - `.gitignore` 补充 `*.db`、`*.rar`、`.run/`、`logs/` 规则。
+
+### 废弃
+
+- 无。
