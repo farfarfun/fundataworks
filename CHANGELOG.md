@@ -2,6 +2,12 @@
 
 ## [0.1.3]
 
+### 变更
+
+- `uv.lock` 中的传递依赖 urllib3 由 2.5.0 升到 2.8.0，修掉 GitHub dependabot 报出的
+  3 个漏洞（2 个 HIGH：`HTTPResponse.stream()/read_chunked()` 无界缓冲、HTTPS 代理的
+  TLS 配置可能被忽略；1 个 MEDIUM：chunked deflate 可进入无限循环）。本包代码未改动。
+
 ### 修复
 
 - `create_dijob` 原先用 `method="GET"` 把全部字段（含收缩后的
