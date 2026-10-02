@@ -161,6 +161,15 @@ def _client_with_mocked_call_api():
     return client
 
 
+def _assert_api_call(client, action, method, *, query=None, body=None):
+    client.call_api.assert_called_once()
+    params, request, _runtime = client.call_api.call_args.args
+    assert params.action == action
+    assert params.method == method
+    assert request.query == query
+    assert request.body == body
+
+
 def test_get_node_calls_api_once():
     from alibabacloud_dataworks_public20200518 import models as models_20200518
 
@@ -169,7 +178,12 @@ def test_get_node_calls_api_once():
 
     result = client.get_node(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "GetNode",
+        "POST",
+        body={"NodeId": 1, "ProjectEnv": "PROD"},
+    )
     assert result == {"body": {}}
 
 
@@ -194,7 +208,7 @@ def test_list_data_sources_calls_api_once():
 
     client.list_data_sources(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(client, "ListDataSources", "GET", query={"ProjectId": "1"})
 
 
 def test_create_node_calls_api_once():
@@ -207,7 +221,17 @@ def test_create_node_calls_api_once():
 
     client.create_node(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "CreateNode",
+        "POST",
+        body={
+            "ContainerId": "c1",
+            "ProjectId": 1,
+            "Scene": "DATASTUDIO",
+            "Spec": "{}",
+        },
+    )
 
 
 def test_list_nodes_calls_api_once():
@@ -218,7 +242,7 @@ def test_list_nodes_calls_api_once():
 
     client.list_nodes(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(client, "ListNodes", "GET", query={"ProjectId": "1"})
 
 
 def test_update_node_calls_api_once():
@@ -229,7 +253,12 @@ def test_update_node_calls_api_once():
 
     client.update_node(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "UpdateNode",
+        "POST",
+        body={"Id": "1", "ProjectId": 1, "Spec": "{}"},
+    )
 
 
 def test_list_folders_calls_api_once():
@@ -242,7 +271,12 @@ def test_list_folders_calls_api_once():
 
     client.list_folders(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "ListFolders",
+        "POST",
+        body={"PageNumber": 1, "PageSize": 10, "ProjectId": 1},
+    )
 
 
 def test_create_dijob_calls_api_once():
@@ -253,7 +287,12 @@ def test_create_dijob_calls_api_once():
 
     client.create_dijob(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "CreateDIJob",
+        "GET",
+        query={"JobName": "smoke-job", "ProjectId": "1"},
+    )
 
 
 def test_create_disync_calls_api_once():
@@ -266,7 +305,12 @@ def test_create_disync_calls_api_once():
 
     client.create_disync(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "CreateDISyncTask",
+        "POST",
+        query={"ProjectId": "1", "TaskName": "smoke-task"},
+    )
 
 
 def test_create_pipeline_run_calls_api_once():
@@ -277,7 +321,12 @@ def test_create_pipeline_run_calls_api_once():
 
     client.create_pipeline_run(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "CreatePipelineRun",
+        "POST",
+        body={"ProjectId": 1, "Type": "MANUAL"},
+    )
 
 
 def test_get_pipeline_run_calls_api_once():
@@ -291,7 +340,7 @@ def test_get_pipeline_run_calls_api_once():
 
     client.get_pipeline_run(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(client, "GetPipelineRun", "GET", query={"ProjectId": "1"})
 
 
 def test_exec_pipeline_run_stage_with_options_calls_api_once():
@@ -304,7 +353,28 @@ def test_exec_pipeline_run_stage_with_options_calls_api_once():
 
     client.exec_pipeline_run_stage_with_options(request)
 
-    client.call_api.assert_called_once()
+    _assert_api_call(
+        client,
+        "ExecPipelineRunStage",
+        "POST",
+        query={"ProjectId": "1"},
+        body={"Code": "stage-code", "Id": "1"},
+    )
+
+
+def test_validation_failure_does_not_call_api():
+    client = _client_with_mocked_call_api()
+    request = mock.MagicMock()
+    request.validate.side_effect = ValueError("invalid request")
+
+    try:
+        client.get_node(request)
+    except ValueError as exc:
+        assert str(exc) == "invalid request"
+    else:
+        raise AssertionError("request validation should fail")
+
+    client.call_api.assert_not_called()
 
 
 def test_public_methods_accept_empty_optional_requests():

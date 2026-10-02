@@ -1,14 +1,18 @@
 [project]
 name = "fundataworks"
 version = "0.1.2"
-description = "fundataworks"
+description = "阿里云 DataWorks OpenAPI 的轻量 Python 客户端，封装节点、数据源、数据集成任务和工作流实例等常用接口。"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = [ "alibabacloud-dataworks-public20200518>=8.0.0", "alibabacloud-dataworks-public20240518>=7.2.5", "alibabacloud-openapi-util>=0.2.2", "alibabacloud-endpoint-util>=0.0.3", "alibabacloud-tea-openapi>=0.3.0", "alibabacloud-tea-util>=0.3.0",]
 
 [dependency-groups]
-dev = [ "pytest>=8.0.0",]
+dev = [ "pytest>=8.0.0", "ruff>=0.13.0",]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
 [[project.authors]]
 name = "牛哥"
 email = "niuliangtao@qq.com"

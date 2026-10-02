@@ -11,12 +11,14 @@ pip install fundataworks
 ## 最小可运行示例
 
 ```python
+import os
+
 from alibabacloud_tea_openapi import models as open_api_models
 from fundataworks import Client
 
 config = open_api_models.Config(
-    access_key_id="<your-access-key-id>",
-    access_key_secret="<your-access-key-secret>",
+    access_key_id=os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"],
+    access_key_secret=os.environ["ALIBABA_CLOUD_ACCESS_KEY_SECRET"],
     region_id="cn-hangzhou",
 )
 client = Client(config)
@@ -25,6 +27,24 @@ client = Client(config)
 # from alibabacloud_dataworks_public20240518 import models as models_20240518
 # request = models_20240518.ListDataSourcesRequest(project_id=123456)
 # result = client.list_data_sources(request)
+```
+
+运行前通过环境变量配置凭据：
+
+```bash
+export ALIBABA_CLOUD_ACCESS_KEY_ID="..."
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="..."
+```
+
+不要将真实凭据写入代码、配置文件或日志，也不要提交到版本库。生产环境建议使用密钥管理服务注入环境变量，并按最小权限原则配置访问权限。
+
+## 开发
+
+```bash
+uv sync --group dev
+uv run ruff check --fix .
+uv run ruff format .
+uv run pytest
 ```
 
 ---
