@@ -1,25 +1,22 @@
-"""fundataworks 冒烟测试（smoke tests）。
+"""fundataworks 测试。
 
-覆盖包导入、`Client` 构造以及各公开方法的“请求对象 -> call_api”拼装路径。
-不测试真实网络行为（`call_api` 被 mock 掉）。
+覆盖包导入、`Client` 构造，以及各公开方法的「请求对象 -> call_api」拼装路径：
+Action 名、HTTP 方法、API 版本号、query/body 字段映射，以及校验失败的错误路径。
+不触碰真实网络（`call_api` 被 mock 掉）。
 
-历史说明：`core.py` 中若干方法曾用
-`Union[models_20200518.XxxRequest, models_20240518.XxxRequest]` 做参数
-注解，但两个 DataWorks OpenAPI 版本的请求模型并不对称
-（`CreateNodeRequest`/`UpdateNodeRequest`/`CreatePipelineRunRequest`/
-`ExecPipelineRunStageRequest` 仅存在于 2024-05-18 版本，
-`CreateDISyncTaskRequest` 仅存在于 2020-05-18 版本），且该文件当时没有
-`from __future__ import annotations`，导致注解在类定义阶段被立即求值、
-从而在 import 期直接抛出 `AttributeError`。现已在 `core.py` 顶部加入
-`from __future__ import annotations` 使注解延迟求值，问题修复，
-本文件不再需要跳过逻辑。
+期望值不是照抄实现，而是对照官方 SDK
+（`alibabacloud_dataworks_public20200518` / `...20240518` 的
+`*_with_options` 方法）逐个核对后写死的，避免把实现里的缺陷当成契约固化下来。
 """
 
 from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import typing
 from unittest import mock
+
+import pytest
 
 
 def test_package_metadata_is_installed():
@@ -98,6 +95,25 @@ def test_client_get_param_builds_expected_params():
     assert params.version == "2020-05-18"
     assert params.method == "POST"
     assert params.style == "RPC"
+    assert params.protocol == "HTTPS"
+    assert params.pathname == "/"
+    assert params.auth_type == "AK"
+    assert params.req_body_type == "formData"
+    assert params.body_type == "json"
+
+
+def test_get_param_version_override_and_fallback():
+    """`version=` 显式传入时优先于 `self.version`，不传则回退。"""
+    from fundataworks import Client
+
+    client = Client(_make_config())
+
+    assert client.get_param(action="CreateNode", version="2024-05-18").version == (
+        "2024-05-18"
+    )
+    assert client.get_param(action="ListNodes").version == "2020-05-18"
+    # None 等价于不传。
+    assert client.get_param(action="ListNodes", version=None).version == "2020-05-18"
 
 
 def test_get_endpoint_prefers_explicit_endpoint():
@@ -148,32 +164,34 @@ def test_get_endpoint_falls_back_to_generated_rule_for_unknown_region():
 
 # ---------------------------------------------------------------------------
 # 各请求方法：mock 掉 call_api（真正发起网络调用的地方），
-# 只验证「请求对象 -> call_api 调用」这段拼装逻辑不会抛异常、
-# 且确实按预期发起了一次调用。不触碰真实阿里云网络/凭据。
+# 断言 Action / HTTP 方法 / API 版本 / query / body 的完整映射。
 # ---------------------------------------------------------------------------
 
 
-def _client_with_mocked_call_api():
+def _client_with_mocked_call_api(version: str = "2020-05-18"):
     from fundataworks import Client
 
-    client = Client(_make_config())
+    client = Client(_make_config(), version=version)
     client.call_api = mock.MagicMock(return_value={"body": {}})
     return client
 
 
-def _assert_api_call(client, action, method, *, query=None, body=None):
+def _assert_api_call(client, action, method, api_version, *, query=None, body=None):
     client.call_api.assert_called_once()
-    params, request, _runtime = client.call_api.call_args.args
+    params, request, runtime = client.call_api.call_args.args
     assert params.action == action
     assert params.method == method
+    assert params.version == api_version
     assert request.query == query
     assert request.body == body
+    assert runtime is not None
 
 
-def test_get_node_calls_api_once():
+def test_get_node_builds_2020_body_and_pins_version():
+    """GetNode 按 2020-05-18 的 NodeId/ProjectEnv 拼 body，版本固定 2020-05-18。"""
     from alibabacloud_dataworks_public20200518 import models as models_20200518
 
-    client = _client_with_mocked_call_api()
+    client = _client_with_mocked_call_api(version="2024-05-18")
     request = models_20200518.GetNodeRequest(node_id=1, project_env="PROD")
 
     result = client.get_node(request)
@@ -182,6 +200,7 @@ def test_get_node_calls_api_once():
         client,
         "GetNode",
         "POST",
+        "2020-05-18",
         body={"NodeId": 1, "ProjectEnv": "PROD"},
     )
     assert result == {"body": {}}
@@ -195,23 +214,30 @@ def test_get_node_omits_unset_fields():
 
     client.get_node(request)
 
-    _, args, _kwargs = client.call_api.mock_calls[0]
-    body = args[1].body
-    assert body == {"NodeId": 1}
+    _assert_api_call(client, "GetNode", "POST", "2020-05-18", body={"NodeId": 1})
 
 
-def test_list_data_sources_calls_api_once():
+def test_list_data_sources_pins_2024_and_shrinks_types():
+    """ListDataSources 用 2024-05-18 的收缩模型，`types` 以 simple 风格拼进 query。"""
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
-    request = models_20240518.ListDataSourcesRequest(project_id=1)
+    request = models_20240518.ListDataSourcesRequest(
+        project_id=1, types=["mysql", "odps"]
+    )
 
     client.list_data_sources(request)
 
-    _assert_api_call(client, "ListDataSources", "GET", query={"ProjectId": "1"})
+    _assert_api_call(
+        client,
+        "ListDataSources",
+        "GET",
+        "2024-05-18",
+        query={"ProjectId": "1", "Types": "mysql,odps"},
+    )
 
 
-def test_create_node_calls_api_once():
+def test_create_node_pins_2024_and_maps_body():
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -225,6 +251,7 @@ def test_create_node_calls_api_once():
         client,
         "CreateNode",
         "POST",
+        "2024-05-18",
         body={
             "ContainerId": "c1",
             "ProjectId": 1,
@@ -234,18 +261,25 @@ def test_create_node_calls_api_once():
     )
 
 
-def test_list_nodes_calls_api_once():
+def test_list_nodes_follows_client_version():
+    """ListNodes 与版本无关，直接序列化请求模型，版本跟随 Client(version=...)。"""
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
-    client = _client_with_mocked_call_api()
-    request = models_20240518.ListNodesRequest(project_id=1)
+    client = _client_with_mocked_call_api(version="2024-05-18")
+    request = models_20240518.ListNodesRequest(project_id=1, name="n")
 
     client.list_nodes(request)
 
-    _assert_api_call(client, "ListNodes", "GET", query={"ProjectId": "1"})
+    _assert_api_call(
+        client,
+        "ListNodes",
+        "GET",
+        "2024-05-18",
+        query={"Name": "n", "ProjectId": "1"},
+    )
 
 
-def test_update_node_calls_api_once():
+def test_update_node_pins_2024_and_maps_body():
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -257,15 +291,16 @@ def test_update_node_calls_api_once():
         client,
         "UpdateNode",
         "POST",
+        "2024-05-18",
         body={"Id": "1", "ProjectId": 1, "Spec": "{}"},
     )
 
 
-def test_list_folders_calls_api_once():
-    from alibabacloud_dataworks_public20240518 import models as models_20240518
+def test_list_folders_follows_client_version():
+    from alibabacloud_dataworks_public20200518 import models as models_20200518
 
     client = _client_with_mocked_call_api()
-    request = models_20240518.ListFoldersRequest(
+    request = models_20200518.ListFoldersRequest(
         project_id=1, page_number=1, page_size=10
     )
 
@@ -275,32 +310,84 @@ def test_list_folders_calls_api_once():
         client,
         "ListFolders",
         "POST",
+        "2020-05-18",
         body={"PageNumber": 1, "PageSize": 10, "ProjectId": 1},
     )
 
 
-def test_create_dijob_calls_api_once():
-    from alibabacloud_dataworks_public20200518 import models as models_20200518
+def test_create_dijob_is_post_with_query_body_split():
+    """CreateDIJob 必须是 POST，且大字段（收缩后的 JSON）走 body、不进 query。
+
+    对照官方 `alibabacloud_dataworks_public20240518` 的
+    `create_dijob_with_options`：query 只放 DestinationDataSourceType /
+    JobName / JobType / MigrationType / Name / ProjectId /
+    SourceDataSourceType，其余（含 *Settings、TableMappings、
+    TransformationRules、Description）全部放 body。
+    """
+    from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
-    request = models_20200518.CreateDIJobRequest(project_id=1, job_name="smoke-job")
+    request = models_20240518.CreateDIJobRequest(
+        project_id=1,
+        job_name="smoke-job",
+        job_type="DATABASE_REALTIME_MIGRATION",
+        migration_type="FullAndRealtimeIncremental",
+        name="smoke",
+        source_data_source_type="MySQL",
+        destination_data_source_type="Hologres",
+        description="desc",
+        job_settings=models_20240518.CreateDIJobRequestJobSettings(
+            channel_settings='{"structInfo":"MANAGED"}'
+        ),
+    )
 
     client.create_dijob(request)
 
-    _assert_api_call(
-        client,
-        "CreateDIJob",
-        "GET",
-        query={"JobName": "smoke-job", "ProjectId": "1"},
-    )
+    client.call_api.assert_called_once()
+    params, api_request, _runtime = client.call_api.call_args.args
+    assert params.action == "CreateDIJob"
+    assert params.method == "POST"
+    assert params.version == "2024-05-18"
+    assert api_request.query == {
+        "DestinationDataSourceType": "Hologres",
+        "JobName": "smoke-job",
+        "JobType": "DATABASE_REALTIME_MIGRATION",
+        "MigrationType": "FullAndRealtimeIncremental",
+        "Name": "smoke",
+        "ProjectId": "1",
+        "SourceDataSourceType": "MySQL",
+    }
+    # 收缩后的 JSON 必须在 body 里，query 里一个都不能出现。
+    assert api_request.body["Description"] == "desc"
+    assert "structInfo" in api_request.body["JobSettings"]
+    for shrink_key in (
+        "JobSettings",
+        "TableMappings",
+        "TransformationRules",
+        "SourceDataSourceSettings",
+        "DestinationDataSourceSettings",
+        "Description",
+    ):
+        assert shrink_key not in api_request.query
 
 
-def test_create_disync_calls_api_once():
+def test_create_disync_puts_task_content_in_body():
+    """CreateDISyncTask 的 TaskContent 是完整任务 JSON，必须走 body。
+
+    对照官方 `alibabacloud_dataworks_public20200518` 的
+    `create_disync_task_with_options`：query 放 ClientToken / ProjectId /
+    TaskName / TaskParam / TaskType，body 只放 TaskContent。
+    """
     from alibabacloud_dataworks_public20200518 import models as models_20200518
 
-    client = _client_with_mocked_call_api()
+    client = _client_with_mocked_call_api(version="2024-05-18")
     request = models_20200518.CreateDISyncTaskRequest(
-        project_id=1, task_name="smoke-task"
+        project_id=1,
+        task_name="smoke-task",
+        task_type="DI_OFFLINE",
+        task_param='{"concurrent":1}',
+        client_token="token-1",
+        task_content='{"type":"job","steps":[]}',
     )
 
     client.create_disync(request)
@@ -309,15 +396,25 @@ def test_create_disync_calls_api_once():
         client,
         "CreateDISyncTask",
         "POST",
-        query={"ProjectId": "1", "TaskName": "smoke-task"},
+        "2020-05-18",
+        query={
+            "ClientToken": "token-1",
+            "ProjectId": "1",
+            "TaskName": "smoke-task",
+            "TaskParam": '{"concurrent":1}',
+            "TaskType": "DI_OFFLINE",
+        },
+        body={"TaskContent": '{"type":"job","steps":[]}'},
     )
 
 
-def test_create_pipeline_run_calls_api_once():
+def test_create_pipeline_run_pins_2024_and_shrinks_object_ids():
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
-    request = models_20240518.CreatePipelineRunRequest(project_id=1, type="MANUAL")
+    request = models_20240518.CreatePipelineRunRequest(
+        project_id=1, type="MANUAL", object_ids=["a", "b"], description="d"
+    )
 
     client.create_pipeline_run(request)
 
@@ -325,25 +422,34 @@ def test_create_pipeline_run_calls_api_once():
         client,
         "CreatePipelineRun",
         "POST",
-        body={"ProjectId": 1, "Type": "MANUAL"},
+        "2024-05-18",
+        body={
+            "Description": "d",
+            "ObjectIds": '["a","b"]',
+            "ProjectId": 1,
+            "Type": "MANUAL",
+        },
     )
 
 
-def test_get_pipeline_run_calls_api_once():
-    # 注意：core.py 里 get_pipeline_run 的类型注解写的是
-    # CreatePipelineRunRequest（沿用查询字段，不影响运行时行为），
-    # 这里按注解声明的类型构造请求做冒烟验证。
+def test_get_pipeline_run_pins_2024():
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
-    request = models_20240518.CreatePipelineRunRequest(project_id=1)
+    request = models_20240518.GetPipelineRunRequest(project_id=1, id="run-1")
 
     client.get_pipeline_run(request)
 
-    _assert_api_call(client, "GetPipelineRun", "GET", query={"ProjectId": "1"})
+    _assert_api_call(
+        client,
+        "GetPipelineRun",
+        "GET",
+        "2024-05-18",
+        query={"Id": "run-1", "ProjectId": "1"},
+    )
 
 
-def test_exec_pipeline_run_stage_with_options_calls_api_once():
+def test_exec_pipeline_run_stage_splits_query_and_body():
     from alibabacloud_dataworks_public20240518 import models as models_20240518
 
     client = _client_with_mocked_call_api()
@@ -357,52 +463,108 @@ def test_exec_pipeline_run_stage_with_options_calls_api_once():
         client,
         "ExecPipelineRunStage",
         "POST",
+        "2024-05-18",
         query={"ProjectId": "1"},
         body={"Code": "stage-code", "Id": "1"},
     )
 
 
-def test_validation_failure_does_not_call_api():
-    client = _client_with_mocked_call_api()
-    request = mock.MagicMock()
-    request.validate.side_effect = ValueError("invalid request")
+# ---------------------------------------------------------------------------
+# 类型注解必须与实现真正支持的请求模型一致
+# ---------------------------------------------------------------------------
 
-    try:
-        client.get_node(request)
-    except ValueError as exc:
-        assert str(exc) == "invalid request"
-    else:
-        raise AssertionError("request validation should fail")
+PUBLIC_REQUEST_METHODS = (
+    "get_node",
+    "list_data_sources",
+    "create_node",
+    "list_nodes",
+    "update_node",
+    "list_folders",
+    "create_dijob",
+    "create_disync",
+    "create_pipeline_run",
+    "get_pipeline_run",
+    "exec_pipeline_run_stage_with_options",
+)
+
+
+def _annotated_request_types(method_name):
+    """取出某个方法参数注解里声明的所有请求模型类。"""
+    from fundataworks.client import core
+
+    hints = typing.get_type_hints(getattr(core.Client, method_name))
+    annotation = next(
+        value for key, value in hints.items() if key not in ("return", "self")
+    )
+    args = typing.get_args(annotation)
+    return list(args) if args else [annotation]
+
+
+@pytest.mark.parametrize("method_name", PUBLIC_REQUEST_METHODS)
+def test_annotations_resolve_to_existing_models(method_name):
+    """注解不得引用某个版本里并不存在的模型类。
+
+    两个 DataWorks 版本的模型并不对称（例如 `CreateNodeRequest` 只有
+    2024-05-18 有），注解里写上不存在的类会让 `typing.get_type_hints()`
+    直接抛 `AttributeError`，类型检查器也拿不到正确信息。
+    """
+    types = _annotated_request_types(method_name)
+    assert types
+    for request_type in types:
+        assert isinstance(request_type, type)
+        assert request_type.__name__.endswith("Request")
+
+
+@pytest.mark.parametrize("method_name", PUBLIC_REQUEST_METHODS)
+def test_every_annotated_request_model_actually_works(method_name):
+    """注解里声明的每个请求模型都必须真的能传进去（空请求的边界路径）。
+
+    这条用来拦住「注解声明支持某版本模型、但实现读的是另一版本独有字段」
+    的情况，例如 `list_data_sources` 读 2024-05-18 独有的 `types`。
+    """
+    for request_type in _annotated_request_types(method_name):
+        client = _client_with_mocked_call_api()
+        getattr(client, method_name)(request_type())
+        client.call_api.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 失败路径
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("method_name", PUBLIC_REQUEST_METHODS)
+def test_validation_failure_short_circuits_before_call_api(method_name):
+    """请求校验失败时必须在发请求之前抛出，不能把非法请求发到线上。"""
+    from fundataworks.client import core
+
+    request_type = _annotated_request_types(method_name)[0]
+    client = _client_with_mocked_call_api()
+
+    with mock.patch.object(
+        core.UtilClient,
+        "validate_model",
+        side_effect=ValueError("invalid request"),
+    ):
+        with pytest.raises(ValueError, match="invalid request"):
+            getattr(client, method_name)(request_type())
 
     client.call_api.assert_not_called()
 
 
-def test_public_methods_accept_empty_optional_requests():
-    """空请求覆盖可选字段未设置时的边界拼装路径。"""
-    from alibabacloud_dataworks_public20200518 import models as models_20200518
-    from alibabacloud_dataworks_public20240518 import models as models_20240518
+def test_unknown_region_without_endpoint_map_entry_still_constructs():
+    """未命中内置 endpoint_map 的 region 走规则生成，不应抛异常。"""
+    from alibabacloud_tea_openapi import models as open_api_models
 
-    cases = (
-        ("get_node", models_20200518.GetNodeRequest),
-        ("list_data_sources", models_20240518.ListDataSourcesRequest),
-        ("create_node", models_20240518.CreateNodeRequest),
-        ("list_nodes", models_20240518.ListNodesRequest),
-        ("update_node", models_20240518.UpdateNodeRequest),
-        ("list_folders", models_20240518.ListFoldersRequest),
-        ("create_dijob", models_20200518.CreateDIJobRequest),
-        ("create_disync", models_20200518.CreateDISyncTaskRequest),
-        ("create_pipeline_run", models_20240518.CreatePipelineRunRequest),
-        ("get_pipeline_run", models_20240518.CreatePipelineRunRequest),
-        (
-            "exec_pipeline_run_stage_with_options",
-            models_20240518.ExecPipelineRunStageRequest,
-        ),
+    from fundataworks import Client
+
+    config = open_api_models.Config(
+        access_key_id="fake-ak",
+        access_key_secret="fake-sk",
+        region_id="ap-northeast-2",
     )
-
-    for method_name, request_type in cases:
-        client = _client_with_mocked_call_api()
-        getattr(client, method_name)(request_type())
-        client.call_api.assert_called_once()
+    client = Client(config)
+    assert client._endpoint == "dataworks-public.ap-northeast-2.aliyuncs.com"
 
 
 # ---------------------------------------------------------------------------

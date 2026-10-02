@@ -4,8 +4,10 @@
 
 ## 安装
 
+本包尚未发布到 PyPI，直接从仓库安装：
+
 ```bash
-pip install fundataworks
+uv pip install git+https://github.com/farfarfun/fundataworks.git
 ```
 
 ## 最小可运行示例
@@ -28,6 +30,23 @@ client = Client(config)
 # request = models_20240518.ListDataSourcesRequest(project_id=123456)
 # result = client.list_data_sources(request)
 ```
+
+## API 版本
+
+DataWorks 有 `2020-05-18` 与 `2024-05-18` 两个 OpenAPI 版本，模型并不对称。
+每个方法只接受它**实际支持**的请求模型，并固定把请求发往对应版本：
+
+| 方法 | 请求模型来自 | 发出的 API 版本 |
+| --- | --- | --- |
+| `get_node` | `...20200518` | 固定 `2020-05-18` |
+| `create_disync` | `...20200518` | 固定 `2020-05-18` |
+| `list_data_sources` | `...20240518` | 固定 `2024-05-18` |
+| `create_dijob` | `...20240518` | 固定 `2024-05-18` |
+| `create_node` / `update_node` | `...20240518` | 固定 `2024-05-18` |
+| `create_pipeline_run` / `get_pipeline_run` / `exec_pipeline_run_stage_with_options` | `...20240518` | 固定 `2024-05-18` |
+| `list_nodes` / `list_folders` | 两个版本都可 | 跟随 `Client(config, version=...)` |
+
+`Client(config, version="2024-05-18")` 只影响上表最后一行的两个方法。
 
 运行前通过环境变量配置凭据：
 
