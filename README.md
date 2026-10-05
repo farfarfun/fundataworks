@@ -16,6 +16,7 @@ uv pip install git+https://github.com/farfarfun/fundataworks.git
 import os
 
 from alibabacloud_tea_openapi import models as open_api_models
+from alibabacloud_dataworks_public20240518 import models as models_20240518
 from fundataworks import Client
 
 config = open_api_models.Config(
@@ -25,10 +26,13 @@ config = open_api_models.Config(
 )
 client = Client(config)
 
-# 查询数据源列表需要传入对应版本的请求模型，示例：
-# from alibabacloud_dataworks_public20240518 import models as models_20240518
-# request = models_20240518.ListDataSourcesRequest(project_id=123456)
-# result = client.list_data_sources(request)
+request = models_20240518.ListDataSourcesRequest(
+    project_id=123456,  # 替换为 DataWorks 工作空间 ID
+    page_number=1,
+    page_size=10,
+)
+result = client.list_data_sources(request)
+print(result)
 ```
 
 ## API 版本
@@ -65,6 +69,22 @@ uv run ruff check --fix .
 uv run ruff format .
 uv run pytest
 ```
+
+## 发布
+
+发布流程由 `funbuild` 统一处理。先在本地构建并安装产物进行校验：
+
+```bash
+uv run funbuild install
+```
+
+确认测试、CHANGELOG 和 PyPI 凭据均已就绪后，再执行完整发布流程：
+
+```bash
+uv run funbuild build
+```
+
+`funbuild build` 会自动递增版本、构建、安装校验、发布、推送提交并创建标签；请只在有发布权限的干净工作树中执行。
 
 ---
 
